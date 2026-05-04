@@ -41,19 +41,37 @@ fi
 set -A branches
 idx=0
 
-for arg in "$@"; do
-if [[ "$arg" == "-" ]]; then
+if (( $# == 0 )); then
+fatal "No branches provided via arguments or stdin" "args" "$*"
+fi
+
+
+from_stdin() {
 while read -r line; do
 if [[ -n "$line" ]]; then
 branches[idx]="$line"
 ((idx++))
 fi
 done
-else
-branches[idx]="$arg"
-((idx++))
-fi
+}
+
+from_args() {
+for branch in "$@"; do
+branches[idx]="$branch"; ((idx++))
 done
+}
+
+
+case "$1" in
+-i)
+if [[ ! -r .multi ]]; then
+fatal "Cannot read .multi file"
+fi
+from_stdin < .multi
+;;
+-) from_stdin ;;
+*) from_args ;;
+esac
 
 if (( ${#branches[@]} == 0 )); then
 fatal "No branches provided via arguments or stdin" "args" "$*"
