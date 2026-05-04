@@ -1,0 +1,87 @@
+#!/bin/mksh
+
+USER_ID="$(id -un)"
+
+error_msg() {
+(
+typeset -r msg="$1"
+shift
+printf 'USER="%s"; DATE="%s"; MSG="%s"' "$USER_ID" "$(date)" "$msg"
+while (( $# > 1 )); do
+printf '; %s="%s"' "$1" "$2"
+shift 2
+done
+printf "\n"
+) >&2
+}
+
+fatal() {
+error_msg "$@"
+exit 1
+}
+
+
+if [[ ! -n "$TMUX" ]]; then
+fatal "Must be run inside a tmux session"
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+fatal "git is not installed or not in PATH"
+fi
+
+if ! command -v tmux >/dev/null 2>&1; then
+fatal "tmux is not installed or not in PATH"
+fi
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+fatal "Not a git repository"
+fi
+
+
+set -A branches
+idx=0
+
+for arg in "$@"; do
+if [[ "$arg" == "-" ]]; then
+while read -r line; do
+if [[ -n "$line" ]]; then
+branches[idx]="$line"
+((idx++))
+fi
+done
+else
+branches[idx]="$arg"
+((idx++))
+fi
+done
+
+if (( ${#branches[@]} == 0 )); then
+fatal "No branches provided via arguments or stdin" "args" "$*"
+fi
+
+repo="$(git rev-parse --show-toplevel)"
+
+work() git worktree add "$@"
+
+for branch in "${branches[@]}"; do
+sane_branch="${branch//\//-}"
+dir="${repo}-${sane_branch}"
+
+if [[ ! -d "$dir" ]]; then
+if ! ( work "$dir" "$branch" || work -b "$branch" "$dir" ); then
+fatal "Failed to add git worktree" "branch" "$branch" "dir" "$dir"
+fi
+fi
+
+if ! pane="$(tmux split-window -c "$dir" -P -F "#{pane_id}")"; then
+fatal "Failed to open tmux pane" "branch" "$branch"
+fi
+
+tmux send-keys -t "$pane" "export PS1='($branch) % '" C-m
+tmux send-keys -t "$pane" "clear" C-m
+done
+
+tmux select-layout tiled
+
+exit 0
+

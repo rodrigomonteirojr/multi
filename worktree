@@ -1,0 +1,15 @@
+#!/bin/mksh
+
+set -euo pipefail
+
+typeset -r repo="$1"
+typeset    tree="${2:-$1}"
+
+printf "Creating worktree '%s' for repo '%s'" "$tree" "$repo"
+
+git clone "$repo" "$tree"
+cd "$tree"
+git checkout \
+	$(git commit-tree $(git hash-object -t tree /dev/null) < /dev/null)
+#git worktree add master master
+
